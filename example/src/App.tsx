@@ -17,12 +17,13 @@ import XbeeBleManager from 'react-native-xbee-ble';
 import { useRef } from 'react';
 const XbeeBleManagerModule = NativeModules.XbeeBle;
 const xbeeBleManagerEmitter = new NativeEventEmitter(XbeeBleManagerModule);
-
+import { Buffer } from 'buffer';
 export interface Peripheral {
   id: string;
   rssi: number;
   name?: string;
   advertising: AdvertisingData;
+  connected?: boolean;
 }
 
 export interface AdvertisingData {
@@ -43,21 +44,18 @@ export default function App() {
     if (!peripheral.name) {
       peripheral.name = 'NO NAME';
     }
-    //console.log('Got ble peripheral', peripheral);
     if (!peripherals.has(peripheral.id) && peripheral.name.includes('XBee')) {
       peripherals.set(peripheral.id, peripheral);
       setList(Array.from(peripherals.values()));
     }
-    //peripherals.set(peripheral.id, peripheral);
-    //setList(Array.from(peripherals.values()));
   };
-
-  /*const handleDiscoverPeripheral = (name: string) => {
-    console.log('Got ble peripheral ', name);
-  };*/
 
   const handleStopScan = () => {
     console.log('Scan is stopped');
+  };
+
+  const handleDataReceived = (data: any) => {
+    console.log(data);
   };
 
   React.useEffect(() => {
@@ -68,6 +66,10 @@ export default function App() {
       handleDiscoverPeripheral
     );
     xbeeBleManagerEmitter.addListener('BleManagerStopScan', handleStopScan);
+    xbeeBleManagerEmitter.addListener(
+      'XbeeReceivedUserDataRelay',
+      handleDataReceived
+    );
 
     if (Platform.OS === 'android' && Platform.Version >= 23) {
       PermissionsAndroid.check(
@@ -103,17 +105,34 @@ export default function App() {
   };
 
   const connect = (item: Peripheral) => () => {
-    //stopScan();
-    XbeeBleManager.stopScan().then(() =>
-      XbeeBleManager.connectToDevice(item.id, '1234')
-        .then(() => (currentAddress.current = item.id))
-        .catch((e) => console.log(e))
-    );
+    if (!item.connected) {
+      XbeeBleManager.stopScan().then(() =>
+        XbeeBleManager.connectToDevice(item.id, '1234')
+          .then(() => {
+            XbeeBleManager.requestConnectionPriority(item.id, 1);
+            currentAddress.current = item.id;
+            item.connected = true;
+            peripherals.set(item.id, item);
+            setList(Array.from(peripherals.values()));
+          })
+          .catch((e) => console.log(e))
+      );
+    } else {
+      XbeeBleManager.disconnectFromDevice(item.id).then(() => {
+        item.connected = false;
+        peripherals.set(item.id, item);
+        setList(Array.from(peripherals.values()));
+      });
+    }
   };
 
   const renderItem = (item: Peripheral) => {
+    const color = item.connected ? 'green' : '#fff';
     return (
-      <TouchableHighlight onPress={connect(item)}>
+      <TouchableHighlight
+        style={[{ backgroundColor: color }]}
+        onPress={connect(item)}
+      >
         <View>
           <Text
             style={{
@@ -146,10 +165,16 @@ export default function App() {
           >
             {item.id}
           </Text>
-          <Button
-            title="Send test"
-            onPress={() => XbeeBleManager.sendUserDataRelay(currentAddress.current, 0, [0x50, 0x50])}
-          />
+          {item.connected && (
+            <Button
+              title="Send test"
+              onPress={() =>
+                XbeeBleManager.sendUserDataRelay(item.id, 0, [
+                  ...Buffer.from('HELLO', 'utf-8'),
+                ])
+              }
+            />
+          )}
         </View>
       </TouchableHighlight>
     );

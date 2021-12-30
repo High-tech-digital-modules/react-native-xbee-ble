@@ -31,6 +31,8 @@ import com.digi.xbee.api.exceptions.XBeeException;
 import com.digi.xbee.api.packet.XBeePacket;
 import com.digi.xbee.api.packet.relay.UserDataRelayPacket;
 import com.digi.xbee.api.models.XBeeLocalInterface;
+import com.digi.xbee.api.listeners.IUserDataRelayReceiveListener;
+import com.digi.xbee.api.models.UserDataRelayMessage;
 
 import androidx.annotation.Nullable;
 
@@ -54,12 +56,14 @@ public class XbeeBleModule extends ReactContextBaseJavaModule {
     private Callback enableBluetoothCallback;
 
     private Map<String, XBeeBLEDevice> connectedXbeeDevices;
+    private Map<String, UserDataRelayListener> relayDevicesListener;
 
     public XbeeBleModule(ReactApplicationContext reactContext) {
         super(reactContext);
         context = reactContext;
         this.reactContext = reactContext;
         connectedXbeeDevices = new HashMap<String, XBeeBLEDevice>();
+        relayDevicesListener = new HashMap<String, UserDataRelayListener>();
     }
 
     @Override
@@ -164,6 +168,14 @@ public class XbeeBleModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
+    public void requestConnectionPriority(String address, int priority) {
+        XBeeBLEDevice xbeeDevice = connectedXbeeDevices.get(address);
+        if (xbeeDevice != null) {
+          xbeeDevice.requestConnectionPriority(priority);
+        }
+    }
+
+    @ReactMethod
     public void connectToDevice(final String address, final String password, Callback callback) {
       new Thread(new Runnable() {
         @Override
@@ -172,9 +184,12 @@ public class XbeeBleModule extends ReactContextBaseJavaModule {
           try {
             Log.d(LOG_TAG, "Connecting");
             xbeeDevice.open();
-            xbeeDevice.requestConnectionPriority(1);
             connectedXbeeDevices.put(address, xbeeDevice);
+            UserDataRelayListener relayListener = new UserDataRelayListener(address);
+            relayDevicesListener.put(address, relayListener);
+            xbeeDevice.addUserDataRelayListener(relayListener);
             callback.invoke();
+
             Log.d(LOG_TAG, "Connected");
           } catch (BluetoothAuthenticationException e) {
             e.printStackTrace();
@@ -196,6 +211,8 @@ public class XbeeBleModule extends ReactContextBaseJavaModule {
         XBeeBLEDevice xbeeDevice = connectedXbeeDevices.get(address);
         if (xbeeDevice != null) {
             xbeeDevice.close();
+            UserDataRelayListener relayListener = relayDevicesListener.get(address);
+            xbeeDevice.removeUserDataRelayListener(relayListener);
             callback.invoke();
         } else
             callback.invoke("Peripheral not found");
@@ -259,9 +276,6 @@ public class XbeeBleModule extends ReactContextBaseJavaModule {
                 long end2 = System.currentTimeMillis();
                 Log.i(LOG_TAG, "Total: " + Long.toString(end2 - start2) + " [ms] "
                         + Integer.toString(total_len) + " bytes => " + Double.toString(new Double(total_len) / new Double(end2 - start2)) + " kB/s");
-                // Send the User Data Relay message.
-
-                //Toast.makeText(RelayConsoleActivity.this, getResources().getString(R.string.send_success), Toast.LENGTH_SHORT).show();
             }
         };
         r.run();
@@ -271,7 +285,6 @@ public class XbeeBleModule extends ReactContextBaseJavaModule {
     		WritableMap object = Arguments.createMap();
     		object.putString("CDVType", "ArrayBuffer");
     		object.putString("data", bytes != null ? Base64.encodeToString(bytes, Base64.NO_WRAP) : null);
-    		//object.putArray("bytes", bytes != null ? bytesToWritableArray(bytes) : null);
     		return object;
     }
 
@@ -306,6 +319,36 @@ public class XbeeBleModule extends ReactContextBaseJavaModule {
               sendEvent("BleManagerDiscoverPeripheral", map);
             }
           });
+        }
+    }
+
+    /**
+     * Listener to be notified when new User Data Relay messages are received.
+     */
+    private class UserDataRelayListener implements IUserDataRelayReceiveListener {
+        private String id;
+        public UserDataRelayListener(String id) {
+          this.id = id;
+        }
+
+        @Override
+        public void userDataRelayReceived(final UserDataRelayMessage userDataRelayMessage) {
+            final String btId = this.id;
+            (new Runnable() {
+                @Override
+                public void run() {
+                  WritableMap map = Arguments.createMap();
+                  map.putInt("sourceInterface", userDataRelayMessage.getSourceInterface().getID());
+                  map.putString("id", btId);
+                  WritableArray data = Arguments.createArray();
+                  byte[] originData = userDataRelayMessage.getData();
+                  for(int i = 0; i < originData.length; i++) {
+                    data.pushInt(originData[i]);
+                  }
+                  map.putArray("data", data);
+                  sendEvent("XbeeReceivedUserDataRelay", map);
+                }
+            }).run();
         }
     }
 }

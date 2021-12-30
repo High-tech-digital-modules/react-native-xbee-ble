@@ -59,6 +59,10 @@ class XbeeBleManager {
     });
   }
 
+  requestConnectionPriority(address: string, priority: number) {
+    XbeeBle.requestConnectionPriority(address, priority);
+  }
+
   sendUserDataRelay(address: string, iface: number, data: number[]) {
     return new Promise<void>((fulfill, reject) => {
       XbeeBle.sendUserDataRelay(address, iface, data, (error: any) => {

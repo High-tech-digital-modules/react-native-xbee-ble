@@ -34,15 +34,16 @@
   "keywords": [
     "react-native",
     "ios",
-    "android"
+    "android",
+    "xbee"
   ],
-  "repository": "https://htdm.cz",
+  "repository": "https://github.com/High-tech-digital-modules/react-native-xbee-ble.git",
   "author": "Daniel Lazar <daniel.lazar@htdm.cz> (https://htdm.cz)",
   "license": "MIT",
   "bugs": {
-    "url": "https://htdm.cz/issues"
+    "url": "https://github.com/High-tech-digital-modules/react-native-xbee-ble.git"
   },
-  "homepage": "https://htdm.cz#readme",
+  "homepage": "https://github.com/High-tech-digital-modules/react-native-xbee-ble.git",
   "publishConfig": {
     "registry": "https://registry.npmjs.org/"
   },

@@ -2,7 +2,7 @@
 
 buildscript {
     ext {
-        minSdkVersion = 16
+        minSdkVersion = 19
         compileSdkVersion = 29
         targetSdkVersion = 29
     }
@@ -35,5 +35,8 @@ allprojects {
         mavenCentral()
         jcenter()
         maven { url 'https://www.jitpack.io' }
+        maven {
+            url 'http://ftp1.digi.com/support/m-repo/'
+        }
     }
 }

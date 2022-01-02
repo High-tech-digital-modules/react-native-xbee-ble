@@ -1,7 +1,7 @@
 # react-native-xbee-ble
 
 This package wraps [xbee-android](https://github.com/digidotcom/xbee-android). Currently, only android is supported
-because xbee does not have Objective-C or Swift implementation. Support for ISO could be done but needs to be
+because xbee does not have Objective-C or Swift implementation. Support for IOS could be done but needs to be
 implemented base on e.g. [react-native-ble-manager](https://github.com/innoveit/react-native-ble-manager) and SRP
 authentication and packets encryption needs to be done.
 
@@ -10,6 +10,24 @@ authentication and packets encryption needs to be done.
 ```sh
 npm install react-native-xbee-ble
 ```
+
+#### Android
+ - Add sources for xbee libraries
+```
+android/build.gradle
+//..
+allprojects {
+    repositories {
+    //..
+      maven {
+        url 'http://ftp1.digi.com/support/m-repo/'
+    }
+    //..
+  }
+}
+```
+ - there might be error also with minSdk 19 needed so also update value in **android/build.gradle**.
+ - there might be error with **android:allowBackup="false"** change it to true
 
 ## Usage
 Permission for android to cover all library functionality

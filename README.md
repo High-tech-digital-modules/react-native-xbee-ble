@@ -5,6 +5,10 @@ because xbee does not have Objective-C or Swift implementation. Support for IOS 
 implemented base on e.g. [react-native-ble-manager](https://github.com/innoveit/react-native-ble-manager) and SRP
 authentication and packets encryption needs to be done.
 
+Package can send [user data relay frame](https://www.digi.com/resources/documentation/Digidocs/90002258/reference/r_frame_0x2d.htm)
+and also receive. There is also possibility to send file over BLE using URL -> it creates stream of user data relay to
+SERIAL interface which can be use for save later by MCU.
+
 ## Installation
 
 ```sh

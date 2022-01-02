@@ -17,10 +17,61 @@ const XbeeBle = NativeModules.XbeeBle
       }
     );
 
+export interface Peripheral {
+  id: string;
+  rssi: number;
+  name?: string;
+  advertising: AdvertisingData;
+  connected?: boolean;
+}
+
+export interface AdvertisingData {
+  isConnectable?: boolean;
+  localName?: string;
+  manufacturerData?: any;
+  serviceUUIDs?: string[];
+  txPowerLevel?: number;
+}
+
+export interface StartOptions {
+  showAlert?: boolean;
+  restoreIdentifierKey?: string;
+  queueIdentifierKey?: string;
+  forceLegacy?: boolean;
+}
+
+export interface FileProgress {
+  address: string;
+  chunks: number;
+  bytes: number;
+  fileLength: number;
+  progress: number;
+  speed: number;
+  isDone: boolean;
+}
+
+export interface UserDataRelayData {
+  sourceInterface: UserDataRelayInterface;
+  id: string;
+  data: number[];
+}
+
+export enum ConnectionPriority {
+  balanced = 0,
+  high = 1,
+  low = 2,
+}
+
+export enum UserDataRelayInterface {
+  serial = 0,
+  ble = 1,
+  micropython = 2,
+}
+
 class XbeeBleManager {
   constructor() {}
 
-  start(options: {} | null) {
+  start(options?: StartOptions | null) {
     return new Promise<void>((fulfill, reject) => {
       if (options == null) {
         options = {};
@@ -59,11 +110,15 @@ class XbeeBleManager {
     });
   }
 
-  requestConnectionPriority(address: string, priority: number) {
+  requestConnectionPriority(address: string, priority: ConnectionPriority) {
     XbeeBle.requestConnectionPriority(address, priority);
   }
 
-  sendUserDataRelay(address: string, iface: number, data: number[]) {
+  sendUserDataRelay(
+    address: string,
+    iface: UserDataRelayInterface,
+    data: number[]
+  ) {
     return new Promise<void>((fulfill, reject) => {
       XbeeBle.sendUserDataRelay(address, iface, data, (error: any) => {
         if (error) {
@@ -75,8 +130,16 @@ class XbeeBleManager {
     });
   }
 
-  sendFile(address: string) {
-    XbeeBle.sendFile(address);
+  sendFile(options: any) {
+    return new Promise<void>((fulfill, reject) => {
+      XbeeBle.sendFile(options, (error: any) => {
+        if (error) {
+          reject(error);
+        } else {
+          fulfill();
+        }
+      });
+    });
   }
 
   connectToDevice(address: string, password: string) {

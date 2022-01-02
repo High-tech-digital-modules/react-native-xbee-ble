@@ -34,6 +34,16 @@ import com.digi.xbee.api.models.XBeeLocalInterface;
 import com.digi.xbee.api.listeners.IUserDataRelayReceiveListener;
 import com.digi.xbee.api.models.UserDataRelayMessage;
 
+import android.os.AsyncTask;
+import android.os.Environment;
+import java.net.URL;
+import javax.net.ssl.HttpsURLConnection;
+import java.net.URLConnection;
+import java.io.InputStream;
+import java.io.BufferedInputStream;
+import java.io.OutputStream;
+import java.io.FileOutputStream;
+
 import androidx.annotation.Nullable;
 
 import static android.os.Build.VERSION_CODES.LOLLIPOP;
@@ -238,47 +248,17 @@ public class XbeeBleModule extends ReactContextBaseJavaModule {
     }
 
     @ReactMethod
-    private void sendFile(String address) {
-        if(!checkIfConnected(address))
-          return;
-        final XBeeBLEDevice xbeeDevice = connectedXbeeDevices.get(address);
-        Runnable r = new Runnable() {
-            @Override
-            public void run() {
-                int total_len = 0;
-                long start2 = System.currentTimeMillis();
-                StringBuilder stringBuilder = new StringBuilder();
-                for (int i = 0; i < 12; i++) {
-                    stringBuilder.append("0123456789012345678");
-                }
-                String resultString = stringBuilder.toString();
-                Thread t1 = null;
-                Thread t2 = null;
-                Thread t[] = new Thread[] {null, null, null};
-                for (int i = 0; i < 100; i++) {
-                    String s = resultString + "aa" + Integer.toString(i);
-                    total_len += s.length();
-                    long start = System.currentTimeMillis();
-                    /*device.sendUserDataRelay(XBeeLocalInterface.SERIAL,
-                            (s).getBytes());*/
-                    final XBeePacket xbeePacket = new UserDataRelayPacket(xbeeDevice.getNextFrameID(),
-                            XBeeLocalInterface.SERIAL, (s).getBytes());
-                    try {
-                        xbeeDevice.sendPacketAsync(xbeePacket);
-                    } catch (XBeeException e) {
-                        e.printStackTrace();
-                    }
-
-
-                    long end = System.currentTimeMillis();
-                    Log.i(LOG_TAG, Long.toString(end - start) + " [ms] " + Integer.toString(total_len) + " bytes ");
-                }
-                long end2 = System.currentTimeMillis();
-                Log.i(LOG_TAG, "Total: " + Long.toString(end2 - start2) + " [ms] "
-                        + Integer.toString(total_len) + " bytes => " + Double.toString(new Double(total_len) / new Double(end2 - start2)) + " kB/s");
-            }
-        };
-        r.run();
+    private void sendFile(ReadableMap options, Callback callback) {
+        if(!options.hasKey("address")) {
+          callback.invoke("Address of device need to be provided");
+        } else if (!options.hasKey("url")) {
+          callback.invoke("Url of file does not exists");
+        }
+        if(!checkIfConnected(options.getString("address"))) {
+          callback.invoke("Device is not connected");
+        }
+        new DownloadFileFromURL(options.getString("address"), callback)
+          .execute(options.getString("url"));
     }
 
     public static WritableMap byteArrayToWritableMap(byte[] bytes) throws JSONException {
@@ -349,6 +329,105 @@ public class XbeeBleModule extends ReactContextBaseJavaModule {
                   sendEvent("XbeeReceivedUserDataRelay", map);
                 }
             }).run();
+        }
+    }
+
+    /**
+     * Background Async Task to download file
+     * */
+    private class DownloadFileFromURL extends AsyncTask<String, ReadableMap, String> {
+
+        String address;
+        Callback callback;
+
+        public DownloadFileFromURL(String address, Callback callback) {
+          this.address = address;
+          this.callback = callback;
+        }
+
+        /**
+         * Before starting background thread Show Progress Bar Dialog
+         * */
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+        }
+
+        /**
+         * Downloading file in background thread and send it to interface
+         * */
+        @Override
+        protected String doInBackground(String... f_url) {
+            int count;
+            try {
+                URL url = new URL(f_url[0]);
+                URLConnection connection = "https".equals(url.getProtocol())
+                  ? (HttpsURLConnection)url.openConnection()
+                  : (URLConnection)url.openConnection();
+                //URLConnection connection = url.openConnection();
+                connection.connect();
+
+                // this will be useful so that you can show a 0-100%
+                // progress bar
+                int lengthOfFile = connection.getContentLength();
+
+                // download the file
+                InputStream input = new BufferedInputStream(url.openStream(),
+                        8192);
+
+                int sizeOfBuffer = 234;
+                byte data[] = new byte[sizeOfBuffer];
+                long total = 0;
+                long total_chunks = 0;
+                long start = System.currentTimeMillis();
+                final XBeeBLEDevice xbeeDevice = connectedXbeeDevices.get(address);
+                while ((count = input.read(data)) != -1) {
+                    total += count;
+                    total_chunks++;
+
+                    Log.i(LOG_TAG, "Chunks: " + Long.toString(total_chunks) + " Bytes: " + Long.toString(total)) ;
+
+                    final XBeePacket xbeePacket = new UserDataRelayPacket(xbeeDevice.getNextFrameID(),
+                            XBeeLocalInterface.SERIAL, count != sizeOfBuffer ? Arrays.copyOfRange(data, 0, count) : data);
+                    try {
+                        xbeeDevice.sendPacketAsync(xbeePacket);
+                    } catch (XBeeException e) {
+                        callback.invoke("Failed to send xbee relay message");
+                        e.printStackTrace();
+                        break;
+                    }
+                    WritableMap map = Arguments.createMap();
+                    map.putString("address", address);
+                    map.putInt("chunks", (int)total_chunks);
+                    map.putInt("bytes", (int)total);
+                    map.putInt("fileLength", lengthOfFile);
+                    map.putInt("progress", (int) ((total * 100) / lengthOfFile));
+                    map.putDouble("speed", (double)(total) / (System.currentTimeMillis() - start));
+                    map.putBoolean("isDone", total == lengthOfFile);
+                    publishProgress(map);
+                }
+                long end = System.currentTimeMillis();
+                Log.i(LOG_TAG, "Total chunks: " + Long.toString(total_chunks) + " Total: " + Long.toString(end - start) + " [ms] "
+                      + Long.toString(total) + " bytes => " + Double.toString(new Double(total) / new Double(end - start)) + " kB/s");
+
+                input.close();
+            } catch (Exception e) {
+                Log.e(LOG_TAG, e.getMessage());
+                callback.invoke(e.getMessage());
+            }
+
+            return null;
+        }
+
+        protected void onProgressUpdate(ReadableMap... map) {
+            // setting progress percentage
+            sendEvent("XbeeFileSendProgress", (WritableMap)map[0]);
+        }
+
+        @Override
+        protected void onPostExecute(String result) {
+          super.onPostExecute(result);
+          callback.invoke();
         }
     }
 }

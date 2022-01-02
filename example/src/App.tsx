@@ -1,38 +1,30 @@
 import * as React from 'react';
+import { useRef } from 'react';
 
 import {
-  StyleSheet,
-  View,
-  Text,
-  Platform,
-  PermissionsAndroid,
-  NativeEventEmitter,
-  NativeModules,
   Button,
   FlatList,
-  TouchableHighlight,
+  NativeEventEmitter,
+  NativeModules,
+  PermissionsAndroid,
+  Platform,
   SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableHighlight,
+  View,
 } from 'react-native';
-import XbeeBleManager from 'react-native-xbee-ble';
-import { useRef } from 'react';
+import XbeeBleManager, {
+  ConnectionPriority,
+  FileProgress,
+  Peripheral,
+  UserDataRelayData,
+  UserDataRelayInterface,
+} from 'react-native-xbee-ble';
+import { Buffer } from 'buffer';
+
 const XbeeBleManagerModule = NativeModules.XbeeBle;
 const xbeeBleManagerEmitter = new NativeEventEmitter(XbeeBleManagerModule);
-import { Buffer } from 'buffer';
-export interface Peripheral {
-  id: string;
-  rssi: number;
-  name?: string;
-  advertising: AdvertisingData;
-  connected?: boolean;
-}
-
-export interface AdvertisingData {
-  isConnectable?: boolean;
-  localName?: string;
-  manufacturerData?: any;
-  serviceUUIDs?: string[];
-  txPowerLevel?: number;
-}
 
 export default function App() {
   const peripherals = new Map();
@@ -54,12 +46,16 @@ export default function App() {
     console.log('Scan is stopped');
   };
 
-  const handleDataReceived = (data: any) => {
+  const handleFileProgress = (progress: FileProgress) => {
+    console.log(progress);
+  };
+
+  const handleDataReceived = (data: UserDataRelayData) => {
     console.log(data);
   };
 
   React.useEffect(() => {
-    XbeeBleManager.start({ showAlert: false });
+    XbeeBleManager.start();
 
     xbeeBleManagerEmitter.addListener(
       'BleManagerDiscoverPeripheral',
@@ -69,6 +65,11 @@ export default function App() {
     xbeeBleManagerEmitter.addListener(
       'XbeeReceivedUserDataRelay',
       handleDataReceived
+    );
+
+    xbeeBleManagerEmitter.addListener(
+      'XbeeFileSendProgress',
+      handleFileProgress
     );
 
     if (Platform.OS === 'android' && Platform.Version >= 23) {
@@ -90,6 +91,24 @@ export default function App() {
         }
       });
     }
+    return () => {
+      xbeeBleManagerEmitter.removeListener(
+        'BleManagerDiscoverPeripheral',
+        handleDiscoverPeripheral
+      );
+      xbeeBleManagerEmitter.removeListener(
+        'BleManagerStopScan',
+        handleStopScan
+      );
+      xbeeBleManagerEmitter.removeListener(
+        'XbeeReceivedUserDataRelay',
+        handleDataReceived
+      );
+      xbeeBleManagerEmitter.removeListener(
+        'XbeeFileSendProgress',
+        handleFileProgress
+      );
+    };
   }, []);
 
   const startScan = () => {
@@ -109,7 +128,10 @@ export default function App() {
       XbeeBleManager.stopScan().then(() =>
         XbeeBleManager.connectToDevice(item.id, '1234')
           .then(() => {
-            XbeeBleManager.requestConnectionPriority(item.id, 1);
+            XbeeBleManager.requestConnectionPriority(
+              item.id,
+              ConnectionPriority.high
+            );
             currentAddress.current = item.id;
             item.connected = true;
             peripherals.set(item.id, item);
@@ -169,9 +191,24 @@ export default function App() {
             <Button
               title="Send test"
               onPress={() =>
-                XbeeBleManager.sendUserDataRelay(item.id, 0, [
-                  ...Buffer.from('HELLO', 'utf-8'),
-                ])
+                XbeeBleManager.sendUserDataRelay(
+                  item.id,
+                  UserDataRelayInterface.serial,
+                  [...Buffer.from('HELLO', 'utf-8')]
+                )
+              }
+            />
+          )}
+          {item.connected && (
+            <Button
+              title="Send file test"
+              onPress={() =>
+                XbeeBleManager.sendFile({
+                  address: item.id,
+                  url: 'https://i.postimg.cc/7ZtsYgFT/Screenshot-from-2021-12-21-15-45-06.png'
+                })
+                  .then(() => console.log('file sent'))
+                  .catch((err) => console.log(err))
               }
             />
           )}

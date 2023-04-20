@@ -375,20 +375,23 @@ public class XbeeBleModule extends ReactContextBaseJavaModule {
                 InputStream input = new BufferedInputStream(url.openStream(),
                         8192);
 
-                int sizeOfBuffer = 234;
-                byte data[] = new byte[sizeOfBuffer];
+                int sizeOfBuffer = 232;
+                byte data[] = new byte[sizeOfBuffer + 2];
                 long total = 0;
                 long total_chunks = 0;
                 long start = System.currentTimeMillis();
                 final XBeeBLEDevice xbeeDevice = connectedXbeeDevices.get(address);
-                while ((count = input.read(data)) != -1) {
+                while ((count = input.read(data, 2, sizeOfBuffer)) != -1) {
                     total += count;
                     total_chunks++;
 
                     Log.i(LOG_TAG, "Chunks: " + Long.toString(total_chunks) + " Bytes: " + Long.toString(total)) ;
 
+                    data[0] = (byte)'F';
+                    data[1] = (byte)((total_chunks % 255) + 1);
+
                     final XBeePacket xbeePacket = new UserDataRelayPacket(xbeeDevice.getNextFrameID(),
-                            XBeeLocalInterface.SERIAL, count != sizeOfBuffer ? Arrays.copyOfRange(data, 0, count) : data);
+                            XBeeLocalInterface.SERIAL, count != sizeOfBuffer ? Arrays.copyOfRange(data, 0, count + 2) : data);
                     try {
                         xbeeDevice.sendPacketAsync(xbeePacket);
                     } catch (XBeeException e) {
